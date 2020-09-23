@@ -3,6 +3,7 @@
  * simulation with galaxy-like initial conditions.
  */
 #include "barnes_hut.h"
+#include <omp.h>
 
 //Some constants and global variables
 int N = 2500;
@@ -115,13 +116,19 @@ void time_step(void) {
   
   //Calculate mass and center of mass
   calculate_mass(root);
-  calculate_center_of_mass_x(root);
-  calculate_center_of_mass_y(root);
+  #pragma omp parallel sections
+  {
+    #pragma omp section
+    calculate_center_of_mass_x(root);
+    #pragma omp section
+    calculate_center_of_mass_y(root);
+  }
   
   //Calculate forces
   update_forces();
 
   //Update velocities and positions
+  #pragma omp parallel for
   for(int i = 0; i < N; i++) {
     double ax = force_x[i]/mass[i];
     double ay = force_y[i]/mass[i];
@@ -319,6 +326,7 @@ double calculate_center_of_mass_y(struct node_t *node) {
  * the simulation using the Barnes Hut quad tree.
  */
 void update_forces(){
+  #pragma omp parallel for
   for(int i = 0; i < N; i++) {
     force_x[i] = 0;
     force_y[i] = 0;
@@ -369,6 +377,10 @@ void calculate_force(int particle, struct node_t *node, double r){
  * Main function.
  */
 int main(int argc, char *argv[]) {  
+  // for(int i=0; i< argc; i++) {
+  //   printf("%d parametro: %s\n", i , argv[i]);
+  // }
+
   //The second argument sets the number of time steps
   if (argc > 1) {
     time_steps = atoi(argv[1]);
@@ -384,6 +396,23 @@ int main(int argc, char *argv[]) {
     printf("Error: case instantiation failed.\n");
     return 1;
   }
+
+  if(argc > 3) {
+    int num_thread = atoi(argv[3]);
+    if(num_thread == 2 || num_thread == 4 || num_thread == 8 || num_thread == 16)
+      omp_set_num_threads(num_thread);
+    else {
+      printf("Error: invalid number of threads\n");
+      return 1;
+    }
+  }
+  // else {
+  //   printf("Error: unspecified number of threads\n");
+  //   return 1;
+  // }
+
+  int num_threads = omp_get_max_threads();
+  printf("Num of threds selected: %d\n", num_threads);
 
   //Begin taking time
   long start = clock();
